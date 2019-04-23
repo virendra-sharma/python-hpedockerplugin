@@ -1,0 +1,11 @@
+dist: xenial
+sudo: false
+language: python
+python:
+    - "3.5"
+install: 
+  - sudo apt-get install -y tox
+
+script: 
+  - tox -e py35 -- test.test_hpe_plugin_v2
+  - tox -e pep8

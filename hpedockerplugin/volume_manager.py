@@ -3,7 +3,6 @@ import string
 import os
 import six
 import time
-import uuid
 from sh import chmod
 from Crypto.Cipher import AES
 import base64
@@ -28,8 +27,10 @@ from hpedockerplugin.hpe import utils
 from hpedockerplugin.i18n import _, _LE, _LI, _LW
 import hpedockerplugin.synchronization as synchronization
 
+
 LOG = logging.getLogger(__name__)
 PRIMARY = 1
+PRIMARY_REV = 1
 SECONDARY = 2
 
 CONF = cfg.CONF
@@ -37,6 +38,7 @@ CONF = cfg.CONF
 
 class VolumeManager(object):
     def __init__(self, host_config, hpepluginconfig, etcd_util,
+                 node_id,
                  backend_name='DEFAULT'):
         self._host_config = host_config
         self._hpepluginconfig = hpepluginconfig
@@ -91,7 +93,7 @@ class VolumeManager(object):
         self._connector = self._get_connector(hpepluginconfig)
 
         # Volume fencing requirement
-        self._node_id = self._get_node_id()
+        self._node_id = node_id
 
     def _initialize_configuration(self):
         self.src_bkend_config = self._get_src_bkend_config()
@@ -145,7 +147,7 @@ class VolumeManager(object):
             # if 'hpe3par_snapcpg' is NOT given in hpe.conf this should be
             # default to empty list & populate volume's snap_cpg later with
             # value given with '-o cpg'
-            config.hpe3par_snapcpg = []
+            config.hpe3par_snapcpg = hpeconf.hpe3par_cpg
 
         LOG.info("Got source backend configuration!")
         return config
@@ -171,7 +173,7 @@ class VolumeManager(object):
             raise exception.HPEPluginNotInitializedException(reason=msg)
 
         try:
-            hpeplugin_driver.do_setup(timeout=5)
+            hpeplugin_driver.do_setup(timeout=30)
             hpeplugin_driver.check_for_setup_error()
             return hpeplugin_driver
         except Exception as ex:
@@ -189,19 +191,6 @@ class VolumeManager(object):
         return connector.InitiatorConnector.factory(
             protocol, root_helper, use_multipath=self._use_multipath,
             device_scan_attempts=5, transport='default')
-
-    @staticmethod
-    def _get_node_id():
-        # Save node-id if it doesn't exist
-        node_id_file_path = '/etc/hpedockerplugin/.node_id'
-        if not os.path.isfile(node_id_file_path):
-            node_id = str(uuid.uuid4())
-            with open(node_id_file_path, 'w') as node_id_file:
-                node_id_file.write(node_id)
-        else:
-            with open(node_id_file_path, 'r') as node_id_file:
-                node_id = node_id_file.readline()
-        return node_id
 
     @synchronization.synchronized_volume('{volname}')
     def create_volume(self, volname, vol_size, vol_prov,
@@ -335,7 +324,8 @@ class VolumeManager(object):
             return True
         return volume.DEFAULT_COMPRESSION_VAL
 
-    def manage_existing(self, volname, existing_ref, backend='DEFAULT'):
+    def manage_existing(self, volname, existing_ref, backend='DEFAULT',
+                        manage_opts=None):
         LOG.info('Managing a %(vol)s' % {'vol': existing_ref})
 
         # NOTE: Since Docker passes user supplied names and not a unique
@@ -356,6 +346,7 @@ class VolumeManager(object):
         vol['backend'] = backend
         vol['fsOwner'] = None
         vol['fsMode'] = None
+        vol['Options'] = manage_opts
 
         parent_vol = ""
         try:
@@ -368,6 +359,12 @@ class VolumeManager(object):
                 % {'existing_ref': existing_ref, 'ex': six.text_type(ex)})
             LOG.exception(msg)
             return json.dumps({u"Err": six.text_type(msg)})
+
+        if ('rcopyStatus' in existing_ref_details and
+                existing_ref_details['rcopyStatus'] != 1):
+            msg = 'ERROR: Volume associated with a replication group '\
+                  'cannot be imported'
+            raise exception.InvalidInput(reason=msg)
 
         vvset_detail = self._hpeplugin_driver.get_vvset_from_volume(
             existing_ref_details['name'])
@@ -443,6 +440,9 @@ class VolumeManager(object):
             vol['snap_cpg'] = volume_detail_3par.get('snapCPG')
 
             if is_snap:
+                if vol['3par_vol_name'].startswith("dcv-"):
+                    vol['3par_vol_name'] = \
+                        str.replace(vol['3par_vol_name'], "dcv-", "dcs-", 1)
                 # managing a snapshot
                 if volume_detail_3par.get("expirationTime8601"):
                     expiration_hours = \
@@ -494,8 +494,9 @@ class VolumeManager(object):
     @synchronization.synchronized_volume('{src_vol_name}')
     def clone_volume(self, src_vol_name, clone_name,
                      size=None, cpg=None, snap_cpg=None,
-                     current_backend='DEFAULT'):
+                     current_backend='DEFAULT', clone_opts=None):
         # Check if volume is present in database
+        LOG.info('hpedockerplugin : clone options 5 %s ' % clone_opts)
         src_vol = self._etcd.get_vol_byname(src_vol_name)
         mnt_conf_delay = volume.DEFAULT_MOUNT_CONFLICT_DELAY
         if src_vol is None:
@@ -551,7 +552,7 @@ class VolumeManager(object):
             self._etcd.save_vol(src_vol)
 
         return self._clone_volume(clone_name, src_vol, size, cpg,
-                                  snap_cpg, current_backend)
+                                  snap_cpg, current_backend, clone_opts)
 
     def _create_snapshot_record(self, snap_vol, snapshot_name, undo_steps):
         self._etcd.save_vol(snap_vol)
@@ -703,8 +704,8 @@ class VolumeManager(object):
                        'id': snapshot_id,
                        'parent_name': src_vol_name,
                        'parent_id': vol['id'],
-                       'fsMode': vol['fsMode'],
-                       'fsOwner': vol['fsOwner'],
+                       'fsMode': vol.get('fsMode'),
+                       'fsOwner': vol.get('fsOwner'),
                        'expiration_hours': expiration_hrs,
                        'retention_hours': retention_hrs}
         if has_schedule:
@@ -848,7 +849,7 @@ class VolumeManager(object):
 
     @synchronization.synchronized_volume('{clone_name}')
     def _clone_volume(self, clone_name, src_vol, size, cpg,
-                      snap_cpg, current_backend):
+                      snap_cpg, current_backend, clone_opts):
 
         # Create clone volume specification
         undo_steps = []
@@ -871,6 +872,8 @@ class VolumeManager(object):
             clone_vol['fsOwner'] = src_vol.get('fsOwner')
             clone_vol['fsMode'] = src_vol.get('fsMode')
             clone_vol['3par_vol_name'] = bkend_clone_name
+            if clone_opts is not None:
+                clone_vol['Options'] = clone_opts
 
             self._etcd.save_vol(clone_vol)
 
@@ -883,35 +886,36 @@ class VolumeManager(object):
         else:
             return json.dumps({u"Err": ''})
 
-    @synchronization.synchronized_volume('{volumename}')
-    def revert_to_snapshot(self, volumename, snapname):
-        volume = self._etcd.get_vol_byname(volumename)
-        if volume is None:
-            msg = (_LE('Volume: %s does not exist' % volumename))
-            LOG.info(msg)
-            response = json.dumps({u"Err": msg})
-            return response
-
-        snapshots = volume['snapshots']
-        LOG.info("Getting snapshot by name: %s" % snapname)
-        snapshot, idx = self._get_snapshot_by_name(snapshots,
-                                                   snapname)
-        if snapshot:
-            try:
-                LOG.info("Found snapshot by name %s" % snapname)
-                self._hpeplugin_driver.revert_snap_to_vol(volume, snapshot)
-                response = json.dumps({u"Err": ''})
-                return response
-            except Exception as ex:
-                msg = (_('revert snapshot failed, error is: %s'),
-                       six.text_type(ex))
-                LOG.error(msg)
-                return json.dumps({u"Err": six.text_type(ex)})
-        else:
-            msg = (_LE('snapshot: %s does not exist!' % snapname))
-            LOG.info(msg)
-            response = json.dumps({u"Err": msg})
-            return response
+    # Commenting out unused function to increase coverage
+    # @synchronization.synchronized_volume('{volumename}')
+    # def revert_to_snapshot(self, volumename, snapname):
+    #     volume = self._etcd.get_vol_byname(volumename)
+    #     if volume is None:
+    #         msg = (_LE('Volume: %s does not exist' % volumename))
+    #         LOG.info(msg)
+    #         response = json.dumps({u"Err": msg})
+    #         return response
+    #
+    #     snapshots = volume['snapshots']
+    #     LOG.info("Getting snapshot by name: %s" % snapname)
+    #     snapshot, idx = self._get_snapshot_by_name(snapshots,
+    #                                                snapname)
+    #     if snapshot:
+    #         try:
+    #             LOG.info("Found snapshot by name %s" % snapname)
+    #             self._hpeplugin_driver.revert_snap_to_vol(volume, snapshot)
+    #             response = json.dumps({u"Err": ''})
+    #             return response
+    #         except Exception as ex:
+    #             msg = (_('revert snapshot failed, error is: %s'),
+    #                    six.text_type(ex))
+    #             LOG.error(msg)
+    #             return json.dumps({u"Err": six.text_type(ex)})
+    #     else:
+    #         msg = (_LE('snapshot: %s does not exist!' % snapname))
+    #         LOG.info(msg)
+    #         response = json.dumps({u"Err": msg})
+    #         return response
 
     def _get_snapshot_response(self, snapinfo, snapname):
         err = ''
@@ -1081,10 +1085,11 @@ class VolumeManager(object):
                     qos_filter = self._get_required_qos_field(qos_detail)
                     volume['Status'].update({'qos_detail': qos_filter})
                 except Exception as ex:
-                    msg = (_('unable to get/filter qos from 3par, error is:'
-                             ' %s'), six.text_type(ex))
+                    msg = "ERROR: Failed to retrieve QoS '%s' from 3PAR" \
+                          % qos_name
+                    volume['Status'].update({'qos_detail': msg})
+                    msg += ' %s' % six.text_type(ex)
                     LOG.error(msg)
-                    return json.dumps({u"Err": six.text_type(ex)})
 
             vol_detail = {}
             vol_detail['size'] = volinfo.get('size')
@@ -1098,6 +1103,8 @@ class VolumeManager(object):
             vol_detail['cpg'] = volinfo.get('cpg')
             vol_detail['snap_cpg'] = volinfo.get('snap_cpg')
             vol_detail['backend'] = volinfo.get('backend')
+            vol_detail['domain'] = self._hpeplugin_driver.get_domain(
+                vol_detail['cpg'])
 
             LOG.info(' get_volume_snap_details : adding 3par vol info')
             if '3par_vol_name' in volinfo:
@@ -1107,11 +1114,28 @@ class VolumeManager(object):
                     utils.get_3par_name(volinfo['id'],
                                         False)
 
+            if 'Options' in volinfo:
+                vol_detail['Options'] = volinfo['Options']
+
             if volinfo.get('rcg_info'):
                 vol_detail['secondary_cpg'] = \
                     self.tgt_bkend_config.hpe3par_cpg[0]
                 vol_detail['secondary_snap_cpg'] = \
                     self.tgt_bkend_config.hpe3par_snapcpg[0]
+
+                # fetch rcg details and display
+                rcg_name = volinfo['rcg_info']['local_rcg_name']
+                try:
+                    rcg_detail = self._hpeplugin_driver.get_rcg(rcg_name)
+                    rcg_filter = self._get_required_rcg_field(rcg_detail)
+                    volume['Status'].update({'rcg_detail': rcg_filter})
+                except Exception as ex:
+                    msg = "ERROR: Failed to retrieve RCG '%s' from 3PAR" \
+                          % rcg_name
+                    volume['Status'].update({'rcg_detail': msg})
+                    msg += ' %s' % six.text_type(ex)
+                    LOG.error(msg)
+
             volume['Status'].update({'volume_detail': vol_detail})
 
         response = json.dumps({u"Err": err, u"Volume": volume})
@@ -1226,7 +1250,10 @@ class VolumeManager(object):
 
     def _force_remove_vlun(self, vol, is_snap):
         bkend_vol_name = utils.get_3par_name(vol['id'], is_snap)
-        if self.tgt_bkend_config:
+        # Check if replication is configured and volume is
+        # populated with the RCG
+        if (self.tgt_bkend_config and 'rcg_info' in vol and
+                vol['rcg_info'] is not None):
             if self.tgt_bkend_config.quorum_witness_ip:
                 LOG.info("Peer Persistence setup: Removing VLUNs "
                          "forcefully from remote backend...")
@@ -1236,13 +1263,29 @@ class VolumeManager(object):
                          "removed from remote backend!")
             else:
                 LOG.info("Active/Passive setup: Getting active driver...")
-                driver = self._get_target_driver(vol['rcg_info'])
-                LOG.info("Active/Passive setup: Got active driver!")
-                LOG.info("Active/Passive setup: Removing VLUNs "
-                         "forcefully from remote backend...")
-                driver.force_remove_volume_vlun(bkend_vol_name)
-                LOG.info("Active/Passive setup: VLUNs forcefully "
-                         "removed from remote backend!")
+                try:
+                    driver = self._get_target_driver(vol['rcg_info'])
+                    if driver:
+                        LOG.info("Active/Passive setup: Got active driver!")
+                        LOG.info("Active/Passive setup: Removing VLUNs "
+                                 "forcefully from remote backend...")
+                        driver.force_remove_volume_vlun(bkend_vol_name)
+                        LOG.info("Active/Passive setup: VLUNs forcefully "
+                                 "removed from remote backend!")
+                    else:
+                        msg = "Failed to force remove VLUN(s) " \
+                              "Could not determine the target array based on" \
+                              "state of RCG %s." % \
+                              vol['rcg_info']['local_rcg_name']
+                        LOG.error(msg)
+                        raise exception.HPEDriverForceRemoveVLUNFailed(
+                            reason=msg)
+                except Exception as ex:
+                    msg = "Failed to force remove VLUN(s). " \
+                          "Exception: %s" % six.text_type(ex)
+                    LOG.error(msg)
+                    raise exception.HPEDriverForceRemoveVLUNFailed(
+                        reason=six.text_type(ex))
         else:
             LOG.info("Removing VLUNs forcefully from remote backend...")
             self._primary_driver.force_remove_volume_vlun(bkend_vol_name)
@@ -1256,6 +1299,7 @@ class VolumeManager(object):
             LOG.error(msg)
             raise exception.HPEPluginMountException(reason=msg)
 
+        undo_steps = []
         volid = vol['id']
         is_snap = False
         if 'is_snap' not in vol:
@@ -1265,6 +1309,12 @@ class VolumeManager(object):
             is_snap = vol['is_snap']
             vol['fsOwner'] = vol['snap_metadata'].get('fsOwner')
             vol['fsMode'] = vol['snap_metadata'].get('fsMode')
+
+        if 'mount_conflict_delay' not in vol:
+            m_conf_delay = volume.DEFAULT_MOUNT_CONFLICT_DELAY
+            vol['mount_conflict_delay'] = m_conf_delay
+            self._etcd.update_vol(volid, 'mount_conflict_delay',
+                                  m_conf_delay)
         # Initialize node-mount-info if volume is being mounted
         # for the first time
         if self._is_vol_not_mounted(vol):
@@ -1272,12 +1322,6 @@ class VolumeManager(object):
                      "mount ID %s" % mount_id)
             node_mount_info = {self._node_id: [mount_id]}
             vol['node_mount_info'] = node_mount_info
-
-            if 'mount_conflict_delay' not in vol:
-                m_conf_delay = volume.DEFAULT_MOUNT_CONFLICT_DELAY
-                vol['mount_conflict_delay'] = m_conf_delay
-                self._etcd.update_vol(volid, 'mount_conflict_delay',
-                                      m_conf_delay)
         else:
             # Volume is in mounted state - Volume fencing logic begins here
             node_mount_info = vol['node_mount_info']
@@ -1330,11 +1374,18 @@ class VolumeManager(object):
                 LOG.debug('connection_info: %(connection_info)s, '
                           'was successfully retrieved',
                           {'connection_info': json.dumps(connection_info)})
+
+                undo_steps.append(
+                    {'undo_func': driver.terminate_connection,
+                     'params': (vol, connector_info, is_snap),
+                     'msg': 'Terminating connection to volume: %s...'
+                            % volname})
             except Exception as ex:
                 msg = (_('Initialize Connection Failed: '
                          'connection info retrieval failed, error is: '),
                        six.text_type(ex))
                 LOG.error(msg)
+                self._rollback(undo_steps)
                 raise exception.HPEPluginMountException(reason=msg)
 
             # Call OS Brick to connect volume
@@ -1342,28 +1393,26 @@ class VolumeManager(object):
                 LOG.debug("OS Brick Connector Connecting Volume...")
                 device_info = self._connector.connect_volume(
                     connection_info['data'])
+
+                undo_steps.append(
+                    {'undo_func': self._connector.disconnect_volume,
+                     'params': (connection_info['data'], None),
+                     'msg': 'Undoing connection to volume: %s...' % volname})
             except Exception as ex:
                 msg = (_('OS Brick connect volume failed, error is: '),
                        six.text_type(ex))
                 LOG.error(msg)
+                self._rollback(undo_steps)
                 raise exception.HPEPluginMountException(reason=msg)
             return device_info, connection_info
 
         pri_connection_info = None
         sec_connection_info = None
-        # Check if replication is configured
-        if self.tgt_bkend_config:
+        # Check if replication is configured and volume is
+        # populated with the RCG
+        if (self.tgt_bkend_config and 'rcg_info' in vol and
+                vol['rcg_info'] is not None):
             LOG.info("This is a replication setup")
-            # TODO: This is where existing volume can be added to RCG
-            # after enabling replication configuration in hpe.conf
-            if 'rcg_info' not in vol or not vol['rcg_info']:
-                msg = "Volume %s is not a replicated volume. It seems" \
-                      "the backend configuration was modified to be a" \
-                      "replication configuration after volume creation."\
-                      % volname
-                LOG.error(msg)
-                raise exception.HPEPluginMountException(reason=msg)
-
             # Check if this is Active/Passive based replication
             if self.tgt_bkend_config.quorum_witness_ip:
                 LOG.info("Peer Persistence has been configured")
@@ -1401,6 +1450,7 @@ class VolumeManager(object):
         if path.exists is False:
             msg = (_('path: %s,  does not exist'), path)
             LOG.error(msg)
+            self._rollback(undo_steps)
             raise exception.HPEPluginMountException(reason=msg)
 
         LOG.debug('path for volume: %(name)s, was successfully created: '
@@ -1417,16 +1467,31 @@ class VolumeManager(object):
         # Determine if we need to mount the volume
         if vol_mount == volume.DEFAULT_MOUNT_VOLUME:
             # mkdir for mounting the filesystem
-            mount_dir = fileutil.mkdir_for_mounting(device_info['path'])
+            if self._host_config.mount_prefix:
+                mount_prefix = self._host_config.mount_prefix
+            else:
+                mount_prefix = None
+            mount_dir = fileutil.mkdir_for_mounting(device_info['path'],
+                                                    mount_prefix)
             LOG.debug('Directory: %(mount_dir)s, '
                       'successfully created to mount: '
                       '%(mount)s',
                       {'mount_dir': mount_dir, 'mount': device_info['path']})
 
+            undo_steps.append(
+                {'undo_func': fileutil.remove_dir,
+                 'params': mount_dir,
+                 'msg': 'Removing mount directory: %s...' % mount_dir})
+
             # mount the directory
             fileutil.mount_dir(path.path, mount_dir)
             LOG.debug('Device: %(path)s successfully mounted on %(mount)s',
                       {'path': path.path, 'mount': mount_dir})
+
+            undo_steps.append(
+                {'undo_func': fileutil.umount_dir,
+                 'params': mount_dir,
+                 'msg': 'Unmounting directory: %s...' % mount_dir})
 
             # TODO: find out how to invoke mkfs so that it creates the
             # filesystem without the lost+found directory
@@ -1440,89 +1505,111 @@ class VolumeManager(object):
         else:
             mount_dir = ''
 
-        if 'fsOwner' in vol and vol['fsOwner']:
-            fs_owner = vol['fsOwner'].split(":")
-            uid = int(fs_owner[0])
-            gid = int(fs_owner[1])
-            os.chown(mount_dir, uid, gid)
+        try:
+            if 'fsOwner' in vol and vol['fsOwner']:
+                fs_owner = vol['fsOwner'].split(":")
+                uid = int(fs_owner[0])
+                gid = int(fs_owner[1])
+                os.chown(mount_dir, uid, gid)
 
-        if 'fsMode' in vol and vol['fsMode']:
-            mode = str(vol['fsMode'])
-            chmod(mode, mount_dir)
+            if 'fsMode' in vol and vol['fsMode']:
+                mode = str(vol['fsMode'])
+                chmod(mode, mount_dir)
 
-        path_info = {}
-        path_info['name'] = volname
-        path_info['path'] = path.path
-        path_info['device_info'] = device_info
-        path_info['connection_info'] = pri_connection_info
-        path_info['mount_dir'] = mount_dir
-        if sec_connection_info:
-            path_info['remote_connection_info'] = sec_connection_info
+            path_info = {}
+            path_info['name'] = volname
+            path_info['path'] = path.path
+            path_info['device_info'] = device_info
+            path_info['connection_info'] = pri_connection_info
+            path_info['mount_dir'] = mount_dir
+            if sec_connection_info:
+                path_info['remote_connection_info'] = sec_connection_info
 
-        LOG.info("Updating node_mount_info in etcd with mount_id %s..."
-                 % mount_id)
-        self._etcd.update_vol(volid,
-                              'node_mount_info',
-                              node_mount_info)
-        LOG.info("node_mount_info updated successfully in etcd with mount_id "
-                 "%s" % mount_id)
-        self._etcd.update_vol(volid, 'path_info', json.dumps(path_info))
+            LOG.info("Updating node_mount_info in etcd with mount_id %s..."
+                     % mount_id)
+            self._etcd.update_vol(volid,
+                                  'node_mount_info',
+                                  node_mount_info)
+            LOG.info("node_mount_info updated successfully in etcd with "
+                     "mount_id %s" % mount_id)
+            self._etcd.update_vol(volid, 'path_info', json.dumps(path_info))
 
-        response = json.dumps({u"Err": '', u"Name": volname,
-                               u"Mountpoint": mount_dir,
-                               u"Devicename": path.path})
+            response = json.dumps({u"Err": '', u"Name": volname,
+                                   u"Mountpoint": mount_dir,
+                                   u"Devicename": path.path})
+        except Exception as ex:
+            self._rollback(undo_steps)
+            response = json.dumps({"Err": '%s' % six.text_type(ex)})
+
         return response
 
     def _get_target_driver(self, rcg_info):
         local_rcg = None
+        rcg_name = rcg_info.get('local_rcg_name')
         try:
-            rcg_name = rcg_info['local_rcg_name']
+            LOG.info("Getting local RCG: %s" % rcg_name)
             local_rcg = self._primary_driver.get_rcg(rcg_name)
             local_role_reversed = local_rcg['targets'][0]['roleReversed']
         except Exception as ex:
-            msg = (_("There was an error fetching the remote copy "
-                     "group from primary array: %s.") % six.text_type(ex))
+            msg = "There was an error fetching the remote copy " \
+                  "group %s from primary array: %s" % \
+                  (rcg_name, six.text_type(ex))
             LOG.error(msg)
 
         remote_rcg = None
+        remote_rcg_name = rcg_info.get('remote_rcg_name')
         try:
-            remote_rcg_name = rcg_info['remote_rcg_name']
+            LOG.info("Getting remote RCG: %s" % remote_rcg_name)
             remote_rcg = self._remote_driver.get_rcg(remote_rcg_name)
             remote_role_reversed = remote_rcg['targets'][0]['roleReversed']
         except Exception as ex:
-            msg = (_("There was an error fetching the remote copy "
-                     "group from secondary array: %s.") % six.text_type(ex))
+            msg = "There was an error fetching the remote copy " \
+                  "group %s from secondary array: %s" % \
+                  (remote_rcg_name, six.text_type(ex))
             LOG.error(msg)
-
-        if not (local_rcg and remote_rcg):
-            msg = (_("Failed to get remote copy group role: %s") % rcg_name)
-            LOG.error(msg)
-            raise exception.HPEPluginMountException(reason=msg)
 
         # Both arrays are up - this could just be a group fail-over
         if local_rcg and remote_rcg:
+            LOG.info("Got both local and remote RCGs! Checking roles...")
             # State before to fail-over
             if local_rcg['role'] == PRIMARY and not local_role_reversed and \
                remote_rcg['role'] == SECONDARY and not remote_role_reversed:
+                LOG.info("Primary array is the active array")
                 return self._primary_driver
+
+            # Primary array is either down or RCG under maintenance
+            # Allow remote target driver to take over
+            if local_rcg['role'] == PRIMARY and not local_role_reversed and \
+               remote_rcg['role'] == PRIMARY_REV and remote_role_reversed:
+                msg = "Secondary array is the active array"
+                LOG.info(msg)
+                return self._remote_driver
 
             # State post recover
             if remote_rcg['role'] == PRIMARY and remote_role_reversed and \
                local_rcg['role'] == SECONDARY and local_role_reversed:
+                LOG.info("Secondary array is the active array")
                 return self._remote_driver
 
-            msg = (_("Cannot perform mount at this time as remote copy group "
-                     " %s is being failed over or failed back. Please try "
-                     "after some time.") % rcg_name)
-            raise exception.HPEPluginMountException(reason=msg)
+            msg = (_("Remote copy group %s is being failed over or failed "
+                     "back. Unable to determine RCG location") % rcg_name)
+            LOG.error(msg)
+            raise exception.RcgStateInTransitionException(reason=msg)
 
         if local_rcg:
             if local_rcg['role'] == PRIMARY and not local_role_reversed:
+                LOG.info("Primary array is the active array")
                 return self._primary_driver
 
         if remote_rcg:
             if remote_rcg['role'] == PRIMARY and remote_role_reversed:
+                LOG.info("Secondary array is the active array")
                 return self._remote_driver
+
+        msg = (_("Failed to get RCG %s. Unable to determine RCG location")
+               % rcg_name)
+        LOG.error(msg)
+        raise exception.HPEDriverRemoteCopyGroupNotFound(name=rcg_name)
 
     @synchronization.synchronized_volume('{volname}')
     def unmount_volume(self, volname, vol_mount, mount_id):
@@ -1561,7 +1648,7 @@ class VolumeManager(object):
                         node_id = pi[0]
                         if node_id == self._node_id:
                             LOG.info("Found matching old path info for old "
-                                     "node ID: %s" % pi)
+                                     "node ID: %s" % six.text_type(pi))
                             path_info = pi
                             node_owns_volume = False
                             break
@@ -1597,6 +1684,7 @@ class VolumeManager(object):
                 try:
                     mount_id_list.remove(mount_id)
                 except ValueError as ex:
+                    LOG.exception('Ignoring exception: %s' % ex)
                     pass
 
                 LOG.info("Updating node_mount_info '%s' in etcd..."
@@ -1779,9 +1867,16 @@ class VolumeManager(object):
         for undo_action in reversed(rollback_list):
             LOG.info(undo_action['msg'])
             try:
-                undo_action['undo_func'](**undo_action['params'])
+                params = undo_action['params']
+                if type(params) is dict:
+                    undo_action['undo_func'](**undo_action['params'])
+                elif type(params) is tuple:
+                    undo_action['undo_func'](*undo_action['params'])
+                else:
+                    undo_action['undo_func'](undo_action['params'])
             except Exception as ex:
                 # TODO: Implement retry logic
+                LOG.exception('Ignoring exception: %s' % ex)
                 pass
 
     @staticmethod
@@ -1821,11 +1916,23 @@ class VolumeManager(object):
                                   db_snapshots)
 
     @staticmethod
+    def _get_required_rcg_field(rcg_detail):
+        rcg_filter = {}
+
+        msg = 'get_required_rcg_field: %s' % rcg_detail
+        LOG.info(msg)
+        rcg_filter['rcg_name'] = rcg_detail.get('name')
+        # TODO(sonivi): handle in case of multiple target
+        rcg_filter['policies'] = rcg_detail['targets'][0].get('policies')
+        rcg_filter['role'] = volume.RCG_ROLE.get(rcg_detail.get('role'))
+
+        return rcg_filter
+
+    @staticmethod
     def _get_required_qos_field(qos_detail):
         qos_filter = {}
 
-        msg = (_LI('get_required_qos_field: %(qos_detail)s'),
-               {'qos_detail': qos_detail})
+        msg = 'get_required_qos_field: %s' % qos_detail
         LOG.info(msg)
 
         qos_filter['enabled'] = qos_detail.get('enabled')
@@ -1899,7 +2006,8 @@ class VolumeManager(object):
         try:
             passphrase = self._etcd.get_backend_key(backend_name)
         except Exception as ex:
-            LOG.info("Using Plain Text")
+            LOG.info('Exception occurred %s ' % ex)
+            LOG.info("Using PLAIN TEXT for backend '%s'" % backend_name)
         else:
             passphrase = self.key_check(passphrase)
             src_bknd.hpe3par_password = \
@@ -1927,6 +2035,9 @@ class VolumeManager(object):
 
         elif KEY_LEN > 32:
             KEY = key[:32]
+
+        else:
+            KEY = key
 
         return KEY
 

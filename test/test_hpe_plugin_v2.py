@@ -79,6 +79,21 @@ class HpeDockerUnitTestsBase(object):
         test.run_test(self)
 
     @tc_banner_decorator
+    def test_import_already_managed_volume(self):
+        test = createvolume_tester.TestImportAlreadyManagedVolume()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_import_volume_with_different_domain(self):
+        test = createvolume_tester.TestImportVolumeDifferentDomain()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_import_volume_with_invalid_options(self):
+        test = createvolume_tester.TestImportVolumeWithInvalidOptions()
+        test.run_test(self)
+
+    @tc_banner_decorator
     def test_create_volume_with_qos(self):
         test = createvolume_tester.TestCreateVolumeWithQOS()
         test.run_test(self)
@@ -86,11 +101,6 @@ class HpeDockerUnitTestsBase(object):
     @tc_banner_decorator
     def test_create_volume_with_invalid_qos(self):
         test = createvolume_tester.TestCreateVolumeWithInvalidQOS()
-        test.run_test(self)
-
-    @tc_banner_decorator
-    def test_create_volume_with_mutually_exclusive_list(self):
-        test = createvolume_tester.TestCreateVolumeWithMutuallyExclusiveList()
         test.run_test(self)
 
     @tc_banner_decorator
@@ -138,6 +148,17 @@ class HpeDockerUnitTestsBase(object):
     @tc_banner_decorator
     def test_create_vol_set_flash_cache_fails(self):
         test = createvolume_tester.TestCreateVolSetFlashCacheFails()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_create_vol_with_mutually_exclusive_opts(self):
+        test = createvolume_tester.\
+            TestCreateVolumeWithMutuallyExclusiveOptions()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_create_vol_with_invalid_options(self):
+        test = createvolume_tester.TestCreateVolumeWithInvalidOptions()
         test.run_test(self)
 
     """
@@ -198,6 +219,12 @@ class HpeDockerUnitTestsBase(object):
         test = createrepvolume_tester.\
             TestCreateReplicatedVolumeAndRCGCreateFails(
                 backend_name=BKEND_3PAR_AP_STREAMING_REP)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_create_replicated_vol_with_invalid_opts(self):
+        test = createrepvolume_tester.\
+            TestCreateReplicatedVolumeWithInvalidOptions()
         test.run_test(self)
 
     """
@@ -273,6 +300,11 @@ class HpeDockerUnitTestsBase(object):
         test = clonevolume_tester.TestCloneWithFlashCacheAndQOSEtcdSaveFails()
         test.run_test(self)
 
+    @tc_banner_decorator
+    def test_clone_volume_with_invalid_options(self):
+        test = clonevolume_tester.TestCloneVolumeWithInvalidOptions()
+        test.run_test(self)
+
     """
     CREATE REVERT SNAPSHOT related tests
     """
@@ -315,6 +347,14 @@ class HpeDockerUnitTestsBase(object):
         test = createsnapshot_tester.TestCreateSnapshotEtcdSaveFails()
         test.run_test(self)
 
+    @tc_banner_decorator
+    def test_create_snapshot_invalid_options(self):
+        test = createsnapshot_tester.TestCreateSnapshotInvalidOptions()
+        test.run_test(self)
+
+    """
+    CREATE SNAPSHOT SCHEDULE related tests
+    """
     @tc_banner_decorator
     def test_create_snap_schedule(self):
         test = createsnapshot_tester.TestCreateSnpSchedule()
@@ -483,8 +523,18 @@ class HpeDockerUnitTestsBase(object):
         # This will un-mount the volume as the last mount-id gets removed
         test.run_test(self)
 
+    @tc_banner_decorator
+    def test_unmount_vol_not_owned_by_this_node(self):
+        # This is a special test case which makes use of the same tester
+        # to execute this TC twice. The idea
+        # is to start with a volume which has two mount-ids i.e. it has been
+        # mounted twice. This TC tries to unmount it twice and checks if
+        # node_mount_info got removed from the volume object
+        test = unmountvolume_tester.TestUnmountVolNotOwnedByThisNode()
+        test.run_test(self)
+
     """
-    INSPECT SNAPSHOT related tests
+    INSPECT VOLUME/SNAPSHOT related tests
     """
     @tc_banner_decorator
     def test_sync_snapshots(self):
@@ -493,12 +543,27 @@ class HpeDockerUnitTestsBase(object):
 
     @tc_banner_decorator
     def test_qos_vol(self):
-        test = getvolume_tester.TestQosVolume()
+        test = getvolume_tester.TestGetVolumeWithQos()
         test.run_test(self)
 
     @tc_banner_decorator
     def test_clone_vol(self):
         test = getvolume_tester.TestCloneVolume()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_get_vol_with_get_qos_fails(self):
+        test = getvolume_tester.TestGetVolumeWithGetQoSFails()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_get_rcg_vol(self):
+        test = getvolume_tester.TestGetRcgVolume()
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_get_rcg_vol_fails(self):
+        test = getvolume_tester.TestGetRcgVolumeFails()
         test.run_test(self)
 
     """
@@ -648,9 +713,50 @@ class HpeDockerFCUnitTests(HpeDockerUnitTestsBase, testtools.TestCase):
         test.run_test(self)
 
     @tc_banner_decorator
-    def test_mount_ap_replicated_volume_fc_host(self):
+    def test_mount_ap_replicated_volume_fc_host_rcg_normal(self):
         vol_params = {'vol_type': 'replicated',
-                      'rep_type': 'active-passive'}
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'normal'}
+        test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_mount_ap_replicated_volume_fc_host_rcg_failover(self):
+        vol_params = {'vol_type': 'replicated',
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'failover'}
+        test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_mount_ap_replicated_volume_fc_host_rcg_recover(self):
+        vol_params = {'vol_type': 'replicated',
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'recover'}
+        test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_mount_ap_replicated_volume_fc_host_rcgs_ungettable(self):
+        vol_params = {'vol_type': 'replicated',
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'rcgs_not_gettable'}
+        test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_mount_ap_replicated_volume_fc_host_pri_rcg_gettable(self):
+        vol_params = {'vol_type': 'replicated',
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'only_primary_rcg_gettable'}
+        test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
+        test.run_test(self)
+
+    @tc_banner_decorator
+    def test_mount_ap_replicated_volume_fc_host_sec_rcg_gettable(self):
+        vol_params = {'vol_type': 'replicated',
+                      'rep_type': 'active-passive',
+                      'rcg_state': 'only_secondary_rcg_gettable'}
         test = mountvolume_tester.TestMountVolumeFCHost(vol_params=vol_params)
         test.run_test(self)
 

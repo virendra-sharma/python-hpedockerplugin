@@ -62,6 +62,29 @@ class TestImportVolume(CreateVolumeUnitTest):
         mock_etcd.get_vol_byname.return_value = None
 
         mock_3parclient = self.mock_objects['mock_3parclient']
+        mock_3parclient.getCPG.return_value = {'domain': 'some_domain'}
+        vol_3par_some_domain = {
+            'name': 'dummy_3par_vol',
+            'domain': 'some_domain',
+            'copyType': 'base',
+            'copyOf': '---',
+            'sizeMiB': 2048,
+            'provisioningType': 2,
+            'compressionState': 1,
+            'userCPG': 'some_user_cpg',
+            'snapCPG': 'some_snap_cpg'
+        }
+        mock_3parclient.getVolume.return_value = vol_3par_some_domain
+        mock_3parclient.findVolumeSet.return_value = "some_vvset"
+
+        some_vvset = {
+            'name': 'dummy_vvset',
+            'flashCachePolicy': 1,
+        }
+        mock_3parclient.getVolumeSet.return_value = some_vvset
+
+        mock_3parclient.queryQoSRule.return_value = {'name': 'dummy_qos'}
+
         mock_3parclient.getVLUN.side_effect = \
             [exceptions.HTTPNotFound('fake')]
 
@@ -80,10 +103,72 @@ class TestImportVolumeOtherOption(CreateVolumeUnitTest):
         mock_etcd.get_vol_byname.return_value = None
 
 
+class TestImportAlreadyManagedVolume(CreateVolumeUnitTest):
+    def check_response(self, resp):
+        msg = 'target: %s is already in-use' % 'dcv-vvk_vol'
+        self._test_case.assertEqual(resp, {u"Err": msg})
+
+    def get_request_params(self):
+        return {"Name": "abc_vol",
+                "Opts": {"importVol": "dcv-vvk_vol"}}
+
+    def setup_mock_objects(self):
+        mock_etcd = self.mock_objects['mock_etcd']
+        mock_etcd.get_vol_byname.return_value = None
+
+
+class TestImportVolumeDifferentDomain(CreateVolumeUnitTest):
+    def check_response(self, resp):
+        self._test_case.assertEqual(resp, {u"Err": ""})
+
+    def get_request_params(self):
+        return {"Name": "abc_vol",
+                "Opts": {"importVol": "dummy_3par_vol"}}
+
+    def setup_mock_objects(self):
+        mock_etcd = self.mock_objects['mock_etcd']
+        mock_etcd.get_vol_byname.return_value = None
+
+        mock_3parclient = self.mock_objects['mock_3parclient']
+        vol_3par_with_other_domain = {
+            'name': 'dummy_3par_vol',
+            'domain': 'other_than_some_domain',
+            'copyType': 'base',
+            'copyOf': '---',
+            'sizeMiB': 2048,
+            'provisioningType': 2,
+            'compressionState': 1,
+            'userCPG': 'some_user_cpg',
+            'snapCPG': 'some_snap_cpg'
+        }
+        mock_3parclient.getVolume.return_value = vol_3par_with_other_domain
+        mock_3parclient.getVLUN.side_effect = [
+            exceptions.HTTPNotFound("dummy_3par_vol")
+        ]
+        mock_3parclient.getCPG.return_value = {'domain': 'some_domain'}
+
+
+class TestImportVolumeWithInvalidOptions(CreateVolumeUnitTest):
+    def check_response(self, resp):
+        in_valid_opts = ['expHrs', 'retHrs']
+        in_valid_opts.sort()
+        expected = "Invalid input received: Invalid option(s) " \
+                   "%s specified for operation import volume. " \
+                   "Please check help for usage." % in_valid_opts
+        self._test_case.assertEqual(expected, resp['Err'])
+
+    def get_request_params(self):
+        return {"Name": "test-vol-001",
+                "Opts": {"importVol": "DummyVol",
+                         "expHrs": 111,
+                         "retHrs": 123}}
+
+
 class TestCreateVolumeInvalidName(CreateVolumeUnitTest):
     def check_response(self, resp):
-        self._test_case.assertEqual(resp, {u"Err": 'Invalid volume '
-                                           'name: test@vol@001 is passed.'})
+        expected = {u'Err': 'Invalid input received: Invalid volume name: '
+                            'test@vol@001 is passed.'}
+        self._test_case.assertEqual(expected, resp)
 
     def get_request_params(self):
         return {"Name": "test@vol@001",
@@ -196,28 +281,6 @@ class TestCreateVolumeWithInvalidQOS(CreateVolumeUnitTest):
         # vvset does not exist
         mock_3parclient.addVolumeToVolumeSet.side_effect = \
             [exceptions.HTTPNotFound('fake')]
-
-
-class TestCreateVolumeWithMutuallyExclusiveList(CreateVolumeUnitTest):
-    def check_response(self, resp):
-        self._test_case.assertEqual(
-            {"Err": "['virtualCopyOf', 'cloneOf', 'qos-name',"
-                    " 'replicationGroup'] cannot be specified at the"
-                    " same time"}, resp)
-
-    def get_request_params(self):
-        return {"Name": "test-vol-001",
-                "Opts": {"qos-name": "soni_vvset",
-                         "provisioning": "thin",
-                         "size": "2",
-                         "cloneOf": "clone_of"}}
-
-    def setup_mock_objects(self):
-        mock_etcd = self.mock_objects['mock_etcd']
-        mock_etcd.get_vol_byname.return_value = None
-
-        mock_3parclient = self.mock_objects['mock_3parclient']
-        mock_3parclient.getCPG.return_value = {}
 
 
 # FlashCache = True and qos-name=<vvset_name>
@@ -514,6 +577,41 @@ class TestCreateVolSetFlashCacheFails(CreateVolumeUnitTest):
         mock_3parclient.modifyVolumeSet.side_effect = [
             exceptions.HTTPInternalServerError("Internal server error")
         ]
+
+
+class TestCreateVolumeWithMutuallyExclusiveOptions(CreateVolumeUnitTest):
+    def check_response(self, resp):
+        mutually_exclusive_ops = ['virtualCopyOf', 'cloneOf', 'importVol',
+                                  'replicationGroup']
+        mutually_exclusive_ops.sort()
+        expected_error_msg = "Invalid input received: Operations " \
+                             "%s are mutually exclusive and cannot be " \
+                             "specified together. Please check help for " \
+                             "usage." % mutually_exclusive_ops
+        self._test_case.assertEqual(expected_error_msg, resp['Err'])
+
+    def get_request_params(self):
+        return {"Name": "test-vol-001",
+                "Opts": {"virtualCopyOf": "my-vol",
+                         "cloneOf": "my-vol",
+                         "replicationGroup": "my-rcg"}}
+
+
+class TestCreateVolumeWithInvalidOptions(CreateVolumeUnitTest):
+    def check_response(self, resp):
+        invalid_opts = ['expHrs', 'retHrs']
+        invalid_opts.sort()
+        op = "create volume"
+        expected_error_msg = "Invalid input received: Invalid option(s) " \
+                             "%s specified for operation %s. " \
+                             "Please check help for usage." % \
+                             (invalid_opts, op)
+        self._test_case.assertEqual(expected_error_msg, resp['Err'])
+
+    def get_request_params(self):
+        return {"Name": "test-vol-001",
+                "Opts": {"expHrs": 111,
+                         "retHrs": 123}}
 
 
 # More cases of flash cache

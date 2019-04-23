@@ -1,9 +1,11 @@
 import abc
 import json
 import six
+import time
 
 from io import StringIO
 from twisted.internet import reactor
+
 
 from config import setupcfg
 from hpedockerplugin import exception
@@ -94,6 +96,17 @@ class HpeDockerUnitTestExecutor(object):
         req_body = self._get_request_body(self.get_request_params())
 
         _api = api.VolumePlugin(reactor, self._host_config, self._all_configs)
+        req_params = self.get_request_params()
+        backend = req_params.get('backend', 'DEFAULT')
+
+        while(True):
+            backend_state = _api.is_backend_initialized(backend)
+            print(" ||| Backend %s, backend_state %s " % (backend,
+                                                          backend_state))
+            if backend_state == 'OK' or backend_state == 'FAILED':
+                break
+            time.sleep(1)
+
         try:
             resp = getattr(_api, plugin_api)(req_body)
             resp = json.loads(resp)
@@ -125,7 +138,11 @@ class HpeDockerUnitTestExecutor(object):
         return False
 
     def _get_configuration(self):
-        cfg_file_name = './test/config/hpe_%s.conf' % self._protocol.lower()
+        if self.use_real_flow():
+            cfg_file_name = '/etc/hpedockerplugin/hpe.conf'
+        else:
+            cfg_file_name = './test/config/hpe_%s.conf' % \
+                            self._protocol.lower()
         cfg_param = ['--config-file', cfg_file_name]
         try:
             host_config = setupcfg.get_host_config(cfg_param)

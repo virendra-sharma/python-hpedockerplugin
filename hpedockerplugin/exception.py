@@ -175,7 +175,7 @@ class HPEPluginStartPluginException(PluginException):
 
 
 class HPEPluginNotInitializedException(PluginException):
-    message = _("HPE Docker Volume plugin not ready.")
+    message = _("HPE Docker Volume plugin not ready: %(reason)s")
 
 
 class HPEPluginCreateException(PluginException):
@@ -234,6 +234,10 @@ class HPEPluginSaveFailed(HPEPluginEtcdException):
 
 class HPEPluginLockFailed(HPEPluginEtcdException):
     message = _("ETCD lock failed: %(obj)s")
+
+
+class HPEPluginReadBackendFailed(HPEPluginEtcdException):
+    message = _("ETCD read for backend failed for vol: %(volname)s")
 
 
 class HPEPluginActiveDriverEntryNotFound(HPEPluginEtcdException):
@@ -333,3 +337,7 @@ class InvalidRcgRoleForDeleteVolume(PluginException):
 
 class DeleteReplicatedVolumeFailed(PluginException):
     message = _("Delete Replication Volume Failed: %(reason)s")
+
+
+class RcgStateInTransitionException(PluginException):
+    message = _("Remote copy group state is in transition: %(reason)s")
