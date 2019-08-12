@@ -1,21 +1,21 @@
 # Valid values of Operating Systems: ubuntu, rhel, centos, suse
 platform:
-    os: ubuntu
+    os: rhel
 
 # Plugin with old_version is mandatory for plugin upgrade test case
 # Plugin type supported: containerized (legacy, version 1) and managed (version 2)
 plugin:
     type: managed
-    managed_plugin_latest: dockerciuser/hpedockerplugin:test
+    managed_plugin_latest: hpestorage/hpedockerplugin:3.2.1-prerelease
     managed_plugin_old: dockerciuser/hpedockerplugin:old
     certs_source: /tmp/
-    containerized_image: hpestorage/legacyvolumeplugin:2.1
+    containerized_image: hpestorage/legacyvolumeplugin:3.1
     containerized_plugin: hpe
 
 # Add etcd service details for secured/unsecured connection
 # Specify the name of the etcd container
 etcd:
-    host: 192.168.82.1 
+    host: 15.213.64.165
     #host: localhost
     port: 2379
     client_cert:
@@ -32,16 +32,16 @@ volumes:
 
 # 3Par backend details (mentioned in hpe.conf) to initialize WSAPI session
 backend:
-    3Par_api_url: https://192.168.67.2:8080/api/v1
-    user_cpg: Docker_CI
-    3Par_IP: 192.168.67.2
-    multi_cpg: Docker_CI_Multi
+    3Par_api_url: https://15.213.68.203:443/api/v1
+    user_cpg: arshad_SSD
+    3Par_IP: 15.213.68.203
+    multi_cpg: arshad_SSD
 
 backend2:
-    3Par_api_url : https://192.168.67.7:8080/api/v1
-    user_cpg: docker_cpg
-    3par_IP: 192.168.67.7
-    multi_cpg: test_cpg
+    3Par_api_url : https://15.213.71.140:443/api/v1
+    user_cpg: arshad_ssd
+    3par_IP: 15.213.71.140
+    multi_cpg: arshad_ssd_snap
 
 ActivePassiveRepBackend:
     3Par_api_url : https://192.168.67.5:8080/api/v1
@@ -58,23 +58,23 @@ multipath:
     ports_zones: 1
 
 multipath2:
-    ports_zones: 2
+    ports_zones: 1
 
 # Mention the snapshot cpg here
 snapshot:
-    snap_cpg: Docker_CI 
+    snap_cpg: arshad_SSD
 
 snapshot2:
-    snap_cpg: docker_cpg
+    snap_cpg: arshad_ssd
 
 snapshot3:
-    snap_cpg: FC_r5
+    snap_cpg: arshad_ssd
 
 # Mention the details required to create and verify VVset with QoS in 3par array
 # Set Priority : '1' for Low, '2' for Normal and '3' for High
 qos:
-    domain: TEST_DOMAIN
-    domain2: test_domain
+    domain: 
+    domain2: 
     min_io: 10000
     max_io: 2000000
     min_bw: 30

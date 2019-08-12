@@ -139,7 +139,8 @@ class HPE3ParVolumePluginTest(BaseAPIIntegrationTest):
                         self.assertEqual(inspect_volume['Status']['volume_detail']['snap_cpg'],SNAP_CPG)
                     elif (inspect_volume['Status']['volume_detail']['backend'] == 'ActivePassiveRepBackend'):
                         self.assertEqual(inspect_volume['Status']['volume_detail']['snap_cpg'], SNAP_CPG3)
-
+                    elif (inspect_volume['Status']['volume_detail']['backend'] == 'backend3'):
+                        self.assertEqual(inspect_volume['Status']['volume_detail']['snap_cpg'], SNAP_CPG3)
                     else:
                         self.assertEqual(inspect_volume['Status']['volume_detail']['snap_cpg'],SNAP_CPG2)
 

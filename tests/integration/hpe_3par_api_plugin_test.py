@@ -228,6 +228,8 @@ class PluginTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         pl_data = client.inspect_plugin(HPE3PAR_OLD)
         assert pl_data['Enabled'] is True
 
+        import pdb
+        pdb.set_trace()
         volume_name = helpers.random_name()
         self.tmp_volumes.append(volume_name)
         container_name = helpers.random_name()

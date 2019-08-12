@@ -96,9 +96,9 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(clone_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                 importVol=vol_name)
-        self.hpe_verify_volume_created(volume_name,provisioning='full',importVol=volume_name, size=1)
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',importVol=volume_name, size=1)
         self.hpe_inspect_volume(volume, size=1,
-                                provisioning='full', importVol=vol_name)
+                                provisioning='thin', importVol=vol_name)
 
         snapshot = self.hpe_create_snapshot(snapshot_name, driver=HPE3PAR,
                                             virtualCopyOf=volume_name)
@@ -112,9 +112,9 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
                                        cloneOf=volume_name)
 
         self.hpe_inspect_volume(clone, size=1,
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_verify_volume_created(clone_name, size='1',
-                                       provisioning='full', clone=True)
+                                       provisioning='thin', clone=True)
         self.hpe_delete_volume(clone)
         self.hpe_verify_volume_deleted(clone_name)
 
@@ -190,8 +190,8 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(volume_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                 importVol=vol_name)
-        self.hpe_verify_volume_created(volume_name,provisioning='full',importVol=volume_name, size=1)
-        self.hpe_inspect_volume(volume, size=1, provisioning='full', importVol=vol_name, enabled=True,
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',importVol=volume_name, size=1)
+        self.hpe_inspect_volume(volume, size=1, provisioning='thin', importVol=vol_name, enabled=True,
                                 maxIOPS='1000 IOs/sec', minIOPS='300 IOs/sec', priority='Normal',vvset_name=vvset_name)
 
         hpe_3par_cli.deleteVolumeSet(vvset_name)
@@ -210,16 +210,32 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
 
         volume_name = helpers.random_name()
         self.tmp_volumes.append(volume_name)
-        try:
-            volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
+        container_name= helpers.random_name()
+        self.tmp_volumes.append(container_name)
+        volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                             importVol=vol_name)
-        except Exception as ex:
-            resp = ex.status_code
-            self.assertEqual(resp, 404)
-        self.hpe_volume_not_created(volume_name)
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',importVol=volume_name, size=1)
+        self.hpe_inspect_volume(volume, size=1, provisioning='thin', importVol=vol_name)
+#                                flash_cache='false')
+        host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
+                                                binds= volume_name + ':/data1')
+        container_info = self.hpe_mount_volume(BUSYBOX, command='sh', detach=True,
+                              tty=True, stdin_open=True,
+                              name=container_name, host_config=host_conf
+                              )
+        container_id = container_info['Id']
+        self.hpe_inspect_container_volume_mount(volume_name, container_name)
+        # Verifying in 3par
+        self.hpe_verify_volume_mount(volume_name)
 
+        self.hpe_unmount_volume(container_id)
+        # Verifying in 3par
+        self.hpe_verify_volume_unmount(volume_name)
+        self.hpe_inspect_container_volume_unmount(volume_name, container_name)
+        self.client.remove_container(container_id)
         hpe_3par_cli.deleteVolumeSet(vvset_name)
-        hpe_3par_cli.deleteVolume(vol_name)
+        self.hpe_delete_volume(volume)
+        self.hpe_verify_volume_deleted(volume_name)
 
     def test_manage_snap_without_managing_volume(self):
         '''
@@ -236,7 +252,7 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         sizeMiB = 1024
         try:
             print("Create volume {}".format(vol_name))
-            hpe_3par_cli.createVolume(vol_name, USER_CPG, sizeMiB, {'snapCPG': SNAP_CPG})
+            hpe_3par_cli.createVolume(vol_name, USER_CPG, sizeMiB, {'snapCPG': SNAP_CPG,'tpvv': True})
             hpe_3par_cli.createSnapshot(snap_name, vol_name)
         except Exception as e:
             print("Unable to create volume {}: {}".format(vol_name, e))
@@ -345,9 +361,9 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
                                        cloneOf=volume_name)
 
         self.hpe_inspect_volume(clone, size=1,
-                                provisioning='full', flash_cache=True)
+                                provisioning='thin', flash_cache=True)
         self.hpe_verify_volume_created(clone_name, size='1',
-                                       provisioning='full', clone=True)
+                                       provisioning='thin', clone=True)
         self.hpe_delete_volume(clone)
         self.hpe_verify_volume_deleted(clone_name)
 
@@ -389,8 +405,8 @@ class ManageVolumeTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(volume_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                 importVol=vol_name)
-        self.hpe_verify_volume_created(volume_name,provisioning='full',importVol=volume_name, flash_cache='true', vvs_name=vvset_name, qos='true', size=1)
-        self.hpe_inspect_volume(volume, size=1, provisioning='full', importVol=vol_name, flash_cache=True,
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',importVol=volume_name, flash_cache='true', vvs_name=vvset_name, qos='true', size=1)
+        self.hpe_inspect_volume(volume, size=1, provisioning='thin', importVol=vol_name, flash_cache=True,
                                 maxIOPS='1000 IOs/sec', minIOPS='300 IOs/sec', priority='Normal',vvset_name=vvset_name)
 
         hpe_3par_cli.deleteVolumeSet(vvset_name)

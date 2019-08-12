@@ -72,12 +72,12 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         name = helpers.random_name()
         self.tmp_volumes.append(name)
         volume = self.hpe_create_volume(name, driver=HPE3PAR,
-                                        size=FULL_SIZE, provisioning='full')
+                                        size=FULL_SIZE, provisioning='thin')
         # Verifying in 3par array
         self.hpe_verify_volume_created(name, size=FULL_SIZE,
-                                       provisioning='full')
+                                       provisioning='thin')
         self.hpe_inspect_volume(volume, size=int(FULL_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_delete_volume(volume)
         self.hpe_verify_volume_deleted(name)
 
@@ -311,14 +311,14 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(volume_name)
         self.tmp_volumes.append(clone_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size='10', provisioning='full')
+                                        size='10', provisioning='thin')
         clone = self.hpe_create_volume(clone_name, driver=HPE3PAR,
                                        size='20', cloneOf=volume_name)
 
         self.hpe_inspect_volume(clone, size=20,
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_verify_volume_created(clone_name, size='20',
-                                       provisioning='full', clone=True)
+                                       provisioning='thin', clone=True)
         self.hpe_delete_volume(clone)
         self.hpe_verify_volume_deleted(clone_name)
         self.hpe_delete_volume(volume)
@@ -426,6 +426,8 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
          5. Delete the clone and volume both.
          6. Verify the removal of volumes in 3par array.
         '''
+        import pdb
+        pdb.set_trace()
         volume_name = helpers.random_name()
         clone_name = helpers.random_name()
         self.tmp_volumes.append(volume_name)
@@ -489,7 +491,7 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(snapshot_name)
         self.tmp_volumes.append(volume_name)
         self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size=FULL_SIZE, provisioning='full')
+                                        size=FULL_SIZE, provisioning='thin')
         snapshot = self.hpe_create_snapshot(snapshot_name, driver=HPE3PAR,
                                  virtualCopyOf=volume_name, expirationHours='10',
                                  retentionHours='5')
@@ -662,7 +664,7 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(volume_name)
         try:
             volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size='16', provisioning='full', compression='true')
+                                        size='16', provisioning='thin', compression='true')
         except Exception as ex:
             resp = ex.status_code
             self.assertEqual(resp, 500)
@@ -796,11 +798,11 @@ class VolumesTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         vvset_name = helpers.random_name()
         self.hpe_create_verify_vvs_with_qos(vvs_name=vvset_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR, qos_name=vvset_name,
-                                        size=FULL_SIZE, flash_cache='true', provisioning='full')
+                                        size=FULL_SIZE, flash_cache='true', provisioning='thin')
         self.hpe_verify_volume_created(volume_name, vvset_name,
-                                       size=FULL_SIZE, provisioning='full', flash_cache='true')
+                                       size=FULL_SIZE, provisioning='thin', flash_cache='true')
         self.hpe_inspect_volume(volume, size=int(FULL_SIZE),
-                                flash_cache='true', provisioning='full')
+                                flash_cache='true', provisioning='thin')
         self.hpe_delete_volume(volume)
         self.hpe_verify_volume_deleted(volume_name)
         self.hpe_remove_vvs_qos(vvs_name=vvset_name)

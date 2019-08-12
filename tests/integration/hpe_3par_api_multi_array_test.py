@@ -109,11 +109,11 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         container_name = helpers.random_name()
         self.tmp_volumes.append(container_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full')
-        self.hpe_verify_volume_created(volume_name,provisioning='full',
+                                        size=THIN_SIZE, provisioning='thin')
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',
                                        size=THIN_SIZE)
         self.hpe_inspect_volume(volume, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         snapshot = self.hpe_create_snapshot(snapshot_name, driver=HPE3PAR,
                                             virtualCopyOf=volume_name)
         self.hpe_inspect_snapshot(snapshot, snapshot_name=snapshot_name,
@@ -122,9 +122,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         clone = self.hpe_create_volume(clone_name, driver=HPE3PAR,
                                       cloneOf=volume_name)
         self.hpe_inspect_volume(clone, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_verify_volume_created(clone_name, size=THIN_SIZE,
-                                       provisioning='full', clone=True)
+                                       provisioning='thin', clone=True)
         self.hpe_delete_volume(clone)
         self.hpe_verify_volume_deleted(clone_name)
         
@@ -164,13 +164,13 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_containers.append(container_name)
 
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR, 
-                                        size=THIN_SIZE, provisioning='full',
+                                        size=THIN_SIZE, provisioning='thin',
                                         backend="backend2"
                                        )
-        self.hpe_verify_volume_created(volume_name, provisioning='full', 
+        self.hpe_verify_volume_created(volume_name, provisioning='thin', 
                                        size=THIN_SIZE, backend="backend2")
         self.hpe_inspect_volume(volume, size=int(THIN_SIZE), 
-                                provisioning='full', backend="backend2")
+                                provisioning='thin', backend="backend2")
 
         snapshot = self.hpe_create_snapshot(snapshot_name, driver=HPE3PAR,
                                             virtualCopyOf=volume_name)
@@ -183,9 +183,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         clone = self.hpe_create_volume(clone_name, driver=HPE3PAR,
                                       cloneOf=volume_name)
         self.hpe_inspect_volume(clone, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_verify_volume_created(clone_name, size=THIN_SIZE,
-                                       provisioning='full', clone=True, 
+                                       provisioning='thin', clone=True, 
                                        backend="backend2")
 
         host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
@@ -231,33 +231,33 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(volume_name)
 
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full')
+                                        size=THIN_SIZE, provisioning='thin')
 
         volume1 = self.hpe_create_volume(volume_name1, driver=HPE3PAR,
                                         size=THIN_SIZE, provisioning='thin',
                                         backend="backend2")
 
         volume2 = self.hpe_create_volume(volume_name2, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full')
+                                        size=THIN_SIZE, provisioning='thin')
 
         volume3 = self.hpe_create_volume(volume_name3, driver=HPE3PAR,
                                         size=THIN_SIZE, provisioning='thin',
                                         backend="backend2")
 
         self.hpe_inspect_volume(volume, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_inspect_volume(volume1, size=int(THIN_SIZE),
                                 provisioning='thin', backend="backend2")
         self.hpe_inspect_volume(volume2, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
         self.hpe_inspect_volume(volume3, size=int(THIN_SIZE),
                                 provisioning='thin', backend="backend2")
 
-        self.hpe_verify_volume_created(volume_name, provisioning='full',
+        self.hpe_verify_volume_created(volume_name, provisioning='thin',
                                        size=THIN_SIZE)
         self.hpe_verify_volume_created(volume_name1, provisioning='thin',
                                        size=THIN_SIZE, backend="backend2")
-        self.hpe_verify_volume_created(volume_name2, provisioning='full',
+        self.hpe_verify_volume_created(volume_name2, provisioning='thin',
                                        size=THIN_SIZE)
         self.hpe_verify_volume_created(volume_name3, provisioning='thin',
                                        size=THIN_SIZE, backend="backend2")
@@ -308,7 +308,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         sizeMiB = 1024
         try:
             hpe_3par_cli2.createVolume(vol_name, USER_CPG2, sizeMiB,
-                                       {'snapCPG': SNAP_CPG2})
+                                       {'snapCPG': SNAP_CPG2,'tpvv':True})
         except Exception as e:
             print("Unable to create volume {}: {}".format(vol_name, e))
 
@@ -327,9 +327,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                         importVol=vol_name, backend="backend2")
         self.hpe_inspect_volume(volume, importVol=vol_name, size=1,
-                                provisioning='full', backend="backend2")
+                                provisioning='thin', backend="backend2")
         self.hpe_verify_volume_created(volume_name, importVol=volume_name,
-                                size=1, provisioning='full', backend="backend2")
+                                size=1, provisioning='thin', backend="backend2")
 
         volume1 = self.hpe_create_volume(volume_name1, driver=HPE3PAR,
                                        importVol=snap_name, backend="backend2")
@@ -338,7 +338,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
                                   virtualCopyOf=volume_name,backend="backend2")
         self.hpe_verify_snapshot_created(volume_name, volume_name1,
                                        size=1, importVol=volume_name1,
-                                       provisioning='full', backend="backend2")
+                                       provisioning='thin', backend="backend2")
 
         self.hpe_delete_volume(volume1)
         self.hpe_verify_volume_deleted(volume_name1, backend="backend2")
@@ -353,7 +353,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         sizeMiB = 1024
         try:
             hpe_3par_cli2.createVolume(vol_name, USER_CPG2, sizeMiB,
-                                       {'snapCPG': SNAP_CPG2})
+                                       {'snapCPG': SNAP_CPG2, 'tpvv': True})
         except Exception as e:
             print("Unable to create volume {}: {}".format(vol_name, e))
 
@@ -382,7 +382,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         sizeMiB = 1024
         try:
             hpe_3par_cli2.createVolume(vol_name, USER_CPG2, sizeMiB,
-                                       {'snapCPG': SNAP_CPG2})
+                                       {'snapCPG': SNAP_CPG2, 'tpvv': True})
         except Exception as e:
             print("Unable to create volume {}: {}".format(vol_name, e))
 
@@ -392,9 +392,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                         importVol=vol_name, backend="backend2")
         self.hpe_inspect_volume(volume, importVol=vol_name, size=1,
-                                provisioning='full', backend="backend2")
+                                provisioning='thin', backend="backend2")
         self.hpe_verify_volume_created(volume_name, importVol=volume_name,
-                               size=1, provisioning='full', backend="backend2")
+                               size=1, provisioning='thin', backend="backend2")
 
         self.hpe_delete_volume(volume)
         self.hpe_verify_volume_deleted(volume_name, backend="backend2")
@@ -481,9 +481,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         clone = self.hpe_create_volume(clone_name, driver=HPE3PAR,
                                        cloneOf=volume_name)
 
-        self.hpe_inspect_volume(clone, size=1, provisioning='full',
+        self.hpe_inspect_volume(clone, size=1, provisioning='thin',
                                 flash_cache=True)
-        self.hpe_verify_volume_created(clone_name,size='1',provisioning='full',
+        self.hpe_verify_volume_created(clone_name,size='1',provisioning='thin',
                                        clone=True,backend='backend2')
         self.hpe_delete_volume(clone)
         self.hpe_verify_volume_deleted(clone_name, backend='backend2')
@@ -536,10 +536,10 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_volumes.append(container_name)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                 importVol=vol_name, backend='backend2')
-        self.hpe_verify_volume_created(volume_name,provisioning='full', size=1,
+        self.hpe_verify_volume_created(volume_name,provisioning='thin', size=1,
                                      importVol=volume_name, backend='backend2',
                                      vvs_name=vvset_name, qos='true')
-        self.hpe_inspect_volume(volume,provisioning='full',size=1,enabled=True,
+        self.hpe_inspect_volume(volume,provisioning='thin',size=1,enabled=True,
                                 importVol=vol_name, backend='backend2',
                                 maxIOPS='1000 IOs/sec', minIOPS='300 IOs/sec',
                                 priority='Normal',vvset_name=vvset_name)
@@ -554,9 +554,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
 
         clone = self.hpe_create_volume(clone_name, driver=HPE3PAR,
                                       cloneOf=volume_name)
-        self.hpe_inspect_volume(clone, provisioning='full', size=1)
+        self.hpe_inspect_volume(clone, provisioning='thin', size=1)
         self.hpe_verify_volume_created(clone_name, clone=True, size=1,
-                                       provisioning='full', backend="backend2")
+                                       provisioning='thin', backend="backend2")
 
         host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
                                                binds= volume_name + ':/data1')
@@ -603,16 +603,33 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
 
         volume_name = helpers.random_name()
         self.tmp_volumes.append(volume_name)
-        try:
-            volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
+        container_name = helpers.random_name()
+        self.tmp_volumes.append(container_name)
+        volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                         importVol=vol_name, backend='backend2')
-        except Exception as ex:
-            resp = ex.status_code
-            self.assertEqual(resp, 404)
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',importVol=volume_name,
+                                       size=1, backend='backend2' )
+        self.hpe_inspect_volume(volume, size=1, provisioning='thin', importVol=vol_name)
+#                                flash_cache='false')
+        host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
+                                                binds= volume_name + ':/data1')
+        container_info = self.hpe_mount_volume(BUSYBOX, command='sh', detach=True,
+                              tty=True, stdin_open=True,
+                              name=container_name, host_config=host_conf
+                              )
+        container_id = container_info['Id']
+        self.hpe_inspect_container_volume_mount(volume_name, container_name)
+        # Verifying in 3par
+        self.hpe_verify_volume_mount(volume_name, backend='backend2')
 
-        self.hpe_volume_not_created(volume_name)
-        self.hpe_verify_volume_deleted(volume_name)
-
+        self.hpe_unmount_volume(container_id)
+        # Verifying in 3par
+        self.hpe_verify_volume_unmount(volume_name, backend='backend2')
+        self.hpe_inspect_container_volume_unmount(volume_name, container_name)
+        self.client.remove_container(container_id)
+        hpe_3par_cli2.deleteVolumeSet(vvset_name)
+        self.hpe_delete_volume(volume)
+        self.hpe_verify_volume_deleted(volume_name, backend='backend2')
 
     def test_multi_array_for_both_ISCSI_and_FC(self):
 
@@ -628,10 +645,10 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.tmp_containers.append(container_name1)
 
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full')
+                                        size=THIN_SIZE, provisioning='thin')
         self.hpe_inspect_volume(volume, size=int(THIN_SIZE),
-                                provisioning='full')
-        self.hpe_verify_volume_created(volume_name,provisioning='full',
+                                provisioning='thin')
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',
                                        size=THIN_SIZE)
 
         host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
@@ -643,11 +660,11 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.hpe_inspect_container_volume_mount(volume_name, container_name)
 
         volume1 = self.hpe_create_volume(volume_name1, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full',
+                                        size=THIN_SIZE, provisioning='thin',
                                         backend='backend3')
         self.hpe_inspect_volume(volume1, size=int(THIN_SIZE),
-                                provisioning='full', backend='backend3')
-        self.hpe_verify_volume_created(volume_name1,provisioning='full',
+                                provisioning='thin', backend='backend3')
+        self.hpe_verify_volume_created(volume_name1,provisioning='thin',
                                        size=THIN_SIZE, backend='backend3')
 
         host_conf1 = self.hpe_create_host_config(volume_driver=HPE3PAR,
@@ -688,7 +705,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         sizeMiB = 1024
         try:
             hpe_3par_cli2.createVolume(vol_name, USER_CPG2, sizeMiB,
-                                       {'snapCPG': SNAP_CPG2})
+                                       {'snapCPG': SNAP_CPG2, 'tpvv': True})
         except Exception as e:
             print("Unable to create volume {}: {}".format(vol_name, e))
 
@@ -701,9 +718,9 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
                                         importVol=vol_name, backend="backend2")
         self.hpe_inspect_volume(volume, importVol=vol_name, size=1,
-                                provisioning='full', backend="backend2")
+                                provisioning='thin', backend="backend2")
         self.hpe_verify_volume_created(volume_name, importVol=volume_name,
-                                size=1, provisioning='full', backend="backend2")
+                                size=1, provisioning='thin', backend="backend2")
 
         inspect_volume = self.client.inspect_volume(volume['Name'])
         backend_name = inspect_volume['Status']['volume_detail']['3par_vol_name']
@@ -721,7 +738,7 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
                                   virtualCopyOf=volume_name,backend="backend2")
         self.hpe_verify_snapshot_created(volume_name, volume_name1,
                                        size=1, importVol=volume_name1,
-                                       provisioning='full', backend="backend2")
+                                       provisioning='thin', backend="backend2")
 
         self.hpe_delete_volume(volume1)
         self.hpe_verify_volume_deleted(volume_name1, backend="backend2")
@@ -738,11 +755,11 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         container_name1 = helpers.random_name()
         self.tmp_volumes.append(container_name1)
         volume = self.hpe_create_volume(volume_name, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full')
-        self.hpe_verify_volume_created(volume_name,provisioning='full',
+                                        size=THIN_SIZE, provisioning='thin')
+        self.hpe_verify_volume_created(volume_name,provisioning='thin',
                                        size=THIN_SIZE)
         self.hpe_inspect_volume(volume, size=int(THIN_SIZE),
-                                provisioning='full')
+                                provisioning='thin')
 
         host_conf = self.hpe_create_host_config(volume_driver=HPE3PAR,
                                                binds= volume_name + ':/data1')
@@ -760,12 +777,12 @@ class MultiArrayTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         self.client.remove_container(container_id)
 
         volume1 = self.hpe_create_volume(volume_name1, driver=HPE3PAR,
-                                        size=THIN_SIZE, provisioning='full',
+                                        size=THIN_SIZE, provisioning='thin',
                                         backend='backend4')
-        self.hpe_verify_volume_created(volume_name1,provisioning='full',
+        self.hpe_verify_volume_created(volume_name1,provisioning='thin',
                                        size=THIN_SIZE, backend='backend4')
         self.hpe_inspect_volume(volume1, size=int(THIN_SIZE),
-                                       provisioning='full')
+                                       provisioning='thin')
 
         host_conf1 = self.hpe_create_host_config(volume_driver=HPE3PAR,
                                                binds= volume_name1 + ':/data1')
