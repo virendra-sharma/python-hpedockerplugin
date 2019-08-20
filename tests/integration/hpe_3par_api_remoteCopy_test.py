@@ -148,4 +148,4 @@ class RemoteCopyTest(HPE3ParBackendVerification,HPE3ParVolumePluginTest):
         #Cleanup
         container.remove() 
         self.hpe_delete_volume(volume)
-        self.hpe_verify_volume_deleted(volume_name) 
+        self.hpe_verify_volume_deleted(volume_name, backend='ActivePassiveRepBackend') 

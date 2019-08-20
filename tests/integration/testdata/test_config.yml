@@ -44,7 +44,12 @@ backend2:
     multi_cpg: arshad_ssd_snap
 
 ActivePassiveRepBackend:
-    3Par_api_url : https://192.168.67.5:8080/api/v1
+    3Par_api_url : https://15.213.68.207:443/api/v1
+    array_username : vrops
+    array_password : vrops123
+    target_api_url : https://15.213.71.156:443/api/v1
+    target_username : 3paradm
+    target_password : 3pardata
 
 filepersona:
     3Par_api_url : https://192.168.67.6:8080/api/v1
@@ -83,16 +88,17 @@ qos:
     priority: 1
 
 replication_device:
-    backend_id: CSSOS-SSA04
-    replication_mode: synchronous
-    cpg_map: FC_r1:FC_r1
-    snap_cpg_map: FC_r5:FC_r5
-    hpe3par_api_url: https://192.168.67.7:8080/api/v1
-    hpe3par_username: 3paradm
-    hpe3par_password: 3pardata
-    san_ip: 192.168.67.7
-    san_login: 3paradm
-    san_password: 3pardata
+    backend_id:S3127,
+    replication_mode:synchronous,
+    cpg_map:arshad_ssd:arshad_prim,
+    snap_cpg_map:SSD_r6:arshad_snap,
+    hpe3par_api_url:https://15.213.71.156:443/api/v1,
+    hpe3par_username:3paradm,
+    hpe3par_password:3pardata,
+    san_ip:15.213.71.156,
+    san_login:3paradm,
+    san_password:3pardata
+
 
 # Bind mounts for containerized plugin
 ubuntu_volumes:

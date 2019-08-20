@@ -30,6 +30,11 @@ CLIENT_KEY = cfg['etcd']['client_key']
 HPE3PAR_API_URL = cfg['backend']['3Par_api_url']
 HPE3PAR2_API_URL = cfg['backend2']['3Par_api_url']
 HPE3PAR3_API_URL = cfg['ActivePassiveRepBackend']['3Par_api_url']
+REPL_TARGET_API_URL = cfg['ActivePassiveRepBackend']['target_api_url']
+REPL_TARGET_USER = cfg['ActivePassiveRepBackend']['target_username']
+REPL_TARGET_PASSWORD = cfg['ActivePassiveRepBackend']['target_password']
+REPLICATE_USER = cfg['ActivePassiveRepBackend']['array_username']
+REPLICATE_PASSWORD = cfg['ActivePassiveRepBackend']['array_password']
 HPE3PAR4_API_URL = cfg['filepersona']['3Par_api_url']
 PORTS_ZONES = cfg['multipath']['ports_zones']
 PORTS_ZONES2 = cfg['multipath2']['ports_zones']
@@ -536,14 +541,19 @@ class HPE3ParBackendVerification(BaseAPIIntegrationTest):
     def _hpe_get_3par_client_login_replication(self):
         # Login to 3Par array and initialize connection for WSAPI calls
         hpe_3par_cli = HPE3ParClient(HPE3PAR3_API_URL, True, False, None, True)
-        hpe_3par_cli.login('3paradm', '3pardata')
+        hpe_3par_cli.login(REPLICATE_USER, REPLICATE_PASSWORD)
         return hpe_3par_cli    
-
 
     def _hpe_get_3par_client_login_multi_array(self):
         # Login to 3Par array and initialize connection for WSAPI calls
         hpe_3par_cli = HPE3ParClient(HPE3PAR2_API_URL, True, False, None, True)
         hpe_3par_cli.login('3paradm', '3pardata')
+        return hpe_3par_cli
+
+    def _hpe_get_3par_client_login_target_replication(self):
+        # Login to 3Par array and initialize connection for WSAPI calls
+        hpe_3par_cli = HPE3ParClient(REPL_TARGET_API_URL, True, False, None, True)
+        hpe_3par_cli.login(REPL_TARGET_USER, REPL_TARGET_PASSWORD)
         return hpe_3par_cli
 
     def _hpe_get_3par_client_login_filePersona(self):
@@ -683,8 +693,10 @@ class HPE3ParBackendVerification(BaseAPIIntegrationTest):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 #        hpe3par_cli = self._hpe_get_3par_client_login()
 
-        if backend is not None:
+        if backend is 'backend2':
            hpe3par_cli = self._hpe_get_3par_client_login_multi_array()
+        elif backend is 'ActivePassiveRepBackend':
+           hpe3par_cli = self._hpe_get_3par_client_login_replication()
         else:
            hpe3par_cli = self._hpe_get_3par_client_login()
 
@@ -980,7 +992,7 @@ class HPE3ParBackendVerification(BaseAPIIntegrationTest):
         rcopyStatus = hpe3par_cli.remoteCopyGroupStatusStoppedCheck(rcg_name)
         hpe3par_cli.logout()
 
-        hpe3par_cli = self._hpe_get_3par_client_login_multi_array()
+        hpe3par_cli = self._hpe_get_3par_client_login_target_replication()
         hpe3par_cli.recoverRemoteCopyGroupFromDisaster(rcopygrpname, int(action), optional=None)
         hpe3par_cli.recoverRemoteCopyGroupFromDisaster(rcopygrpname, 9)
         hpe3par_cli.logout()
@@ -1027,6 +1039,6 @@ class HPE3ParBackendVerification(BaseAPIIntegrationTest):
     def hpe_restore_remote_copy_group(self, rcg_name, action):
 
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        hpe3par_cli = self._hpe_get_3par_client_login_multi_array()
+        hpe3par_cli = self._hpe_get_3par_client_login_target_replication()
         hpe3par_cli.recoverRemoteCopyGroupFromDisaster(rcg_name, int(action), optional=None)
         hpe3par_cli.logout()
